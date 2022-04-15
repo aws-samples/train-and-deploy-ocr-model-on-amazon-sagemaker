@@ -1,0 +1,16 @@
+train/0.jpg	國立臺灣大學醫學院附設醫院
+train/1.jpg	三軍總醫院
+train/2.jpg	臺北榮民總醫院
+train/3.jpg	國泰綜合醫院
+train/4.jpg	臺北及林口長庚醫院
+train/5.jpg	馬偕紀念醫院
+train/6.jpg	新光吳火獅紀念醫院
+train/7.jpg	臺北市立萬芳醫院
+train/8.jpg	亞東紀念醫院
+train/9.jpg	臺中榮民總醫院
+train/10.jpg	中山醫學大學附設醫院
+train/11.jpg	中國醫藥大學附設醫院
+train/12.jpg	彰化基督教醫療財團法人彰化基督教醫院
+train/13.jpg	國立成功大學醫學院附設醫院
+train/14.jpg	奇美醫院
+train/15.jpg	高雄榮民總醫院

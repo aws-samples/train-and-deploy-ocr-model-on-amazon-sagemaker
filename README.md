@@ -36,8 +36,8 @@ In progress
 
 - [ ] **SageMaker Experiments** (Yanwei)
 - [ ] **Text generation with Processing Job container**  (Yanwei + Yi-An)
-- [ ] **Evaluation json export during training **  (Yi-An)
-- [ ] **integrate with Amazon SageMaker pipeline pipeline.py **(Yi-An)
+- [ ] **Evaluation json export during training**  (Yi-An)
+- [ ] **integrate with Amazon SageMaker pipeline pipeline.py**(Yi-An)
 
 
 ## Security

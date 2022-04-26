@@ -14,3 +14,4 @@ shapely
 imgaug
 pyclipper
 lmdb
+boto3

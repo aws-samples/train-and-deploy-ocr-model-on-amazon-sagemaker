@@ -58,7 +58,7 @@ def get_training_data_img_and_labels(string_file, font_dir, output_folder, img_p
         else: 
             break
 
-    label_file = open(os.path.join(output_folder, "train.txt"), 'w')
+    label_file = open(os.path.join(output_folder, "label.txt"), 'w')
     for l in labels: 
         line = '\t'.join(l)
         label_file.write(line)
@@ -85,13 +85,18 @@ if __name__ == "__main__":
     train_fn = f"{base_dir}/data/train.txt"
     test_fn = f"{base_dir}/data/test.txt"
     s3 = boto3.resource("s3")
+    print(key)
+    print(key+"/train.txt")
     s3.Bucket(bucket).download_file(key+"/train.txt", train_fn)
     s3.Bucket(bucket).download_file(key+"/test.txt", test_fn)
     font_dir = "/opt/program/ocr_data_generator/setofont"
-    train_output_folder = f"{base_dir}/train"
-    test_output_folder = f"{base_dir}/test"
-    os.mkdir(train_output_folder)
-    os.mkdir(test_output_folder)
+    train_output_folder = f"{base_dir}/input/data/train"
+    test_output_folder = f"{base_dir}/input/data/test"
+    os.makedirs(train_output_folder, exist_ok=True)
+    os.makedirs(test_output_folder, exist_ok=True)
     get_training_data_img_and_labels(train_fn, font_dir, train_output_folder, "train")    
     get_training_data_img_and_labels(test_fn, font_dir, test_output_folder, "test")    
+    os.rename(os.path.join(train_output_folder, "label.txt"),os.path.join(base_dir, "input/data/rec_gt_train.txt"))
+    os.rename(os.path.join(test_output_folder, "label.txt"),os.path.join(base_dir, "input/data/rec_gt_test.txt"))
+    
     

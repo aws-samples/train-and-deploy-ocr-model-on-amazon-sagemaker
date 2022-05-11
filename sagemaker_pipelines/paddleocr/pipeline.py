@@ -27,7 +27,7 @@ from sagemaker.processing import (
     ScriptProcessor,
 )
 from sagemaker.sklearn.processing import SKLearnProcessor
-from sagemaker.workflow.conditions import ConditionLessThanOrEqualTo
+from sagemaker.workflow.conditions import ConditionGreaterThanOrEqualTo
 from sagemaker.workflow.condition_step import (
     ConditionStep,
 )
@@ -47,7 +47,7 @@ from sagemaker.workflow.steps import (
 from sagemaker.workflow.step_collections import RegisterModel
 
 from botocore.exceptions import ClientError
-
+import boto3
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -76,72 +76,7 @@ def get_session(region, default_bucket):
         default_bucket=default_bucket,
     )
 
-def resolve_ecr_uri_from_image_versions(sagemaker_session, image_versions, image_name):
-    """ Gets ECR URI from image versions
-    Args:
-        sagemaker_session: boto3 session for sagemaker client
-        image_versions: list of the image versions
-        image_name: Name of the image
 
-    Returns:
-        ECR URI of the image version
-    """
-
-    #Fetch image details to get the Base Image URI
-    for image_version in image_versions:
-        if image_version['ImageVersionStatus'] == 'CREATED':
-            image_arn = image_version["ImageVersionArn"]
-            version = image_version["Version"]
-            logger.info(f"Identified the latest image version: {image_arn}")
-            response = sagemaker_session.sagemaker_client.describe_image_version(
-                ImageName=image_name,
-                Version=version
-            )
-            return response['ContainerImage']
-    return None
-
-def resolve_ecr_uri(sagemaker_session, image_arn):
-    """Gets the ECR URI from the image name
-
-    Args:
-        sagemaker_session: boto3 session for sagemaker client
-        image_name: name of the image
-
-    Returns:
-        ECR URI of the latest image version
-    """
-
-    # Fetching image name from image_arn (^arn:aws(-[\w]+)*:sagemaker:.+:[0-9]{12}:image/[a-z0-9]([-.]?[a-z0-9])*$)
-    image_name = image_arn.partition("image/")[2]
-    try:
-        # Fetch the image versions
-        next_token=''
-        while True:
-            response = sagemaker_session.sagemaker_client.list_image_versions(
-                ImageName=image_name,
-                MaxResults=100,
-                SortBy='VERSION',
-                SortOrder='DESCENDING',
-                NextToken=next_token
-            )
-            ecr_uri = resolve_ecr_uri_from_image_versions(sagemaker_session, response['ImageVersions'], image_name)
-            if "NextToken" in response:
-                next_token = response["NextToken"]
-
-            if ecr_uri is not None:
-                return ecr_uri
-
-        # Return error if no versions of the image found
-        error_message = (
-            f"No image version found for image name: {image_name}"
-            )
-        logger.error(error_message)
-        raise Exception(error_message)
-
-    except (ClientError, sagemaker_session.sagemaker_client.exceptions.ResourceNotFound) as e:
-        error_message = e.response["Error"]["Message"]
-        logger.error(error_message)
-        raise Exception(error_message)
 
 def get_pipeline(
     region,
@@ -167,12 +102,12 @@ def get_pipeline(
         default_bucket = sagemaker_session.default_bucket()
     if role is None:
         role = sagemaker.session.get_execution_role(sagemaker_session)
-
-    # parameters for pipeline execution
-#     processing_instance_count = ParameterInteger(name="ProcessingInstanceCount", default_value=1)
-#     processing_instance_type = ParameterString(
-#         name="ProcessingInstanceType", default_value="ml.m5.xlarge"
-#     )
+    # parametersagemaker_sessions for pipeline execution
+    sess = boto3.Session()
+    processing_instance_count = ParameterInteger(name="ProcessingInstanceCount", default_value=1)
+    processing_instance_type = ParameterString(
+        name="ProcessingInstanceType", default_value="ml.m5.xlarge"
+    )
     training_instance_type = ParameterString(
         name="TrainingInstanceType", default_value="ml.p2.xlarge"
     )
@@ -184,60 +119,40 @@ def get_pipeline(
     )
     input_data = ParameterString(
         name="InputDataUrl",
-        default_value="s3://{}/DEMO-paddle-byo/".format(default_bucket)
+        default_value="s3://{}/PaddleOCR/input/data".format(default_bucket)
     )
+    account = sess.client("sts").get_caller_identity()["Account"]
+    region = sess.region_name
+    data_generate_image_name = "generate-ocr-train-data"
+    train_image_name = "paddle"
+    data_generate_image = "{}.dkr.ecr.{}.amazonaws.com/{}".format(account, region, data_generate_image_name)
     
-    training_image_name = "paddle"
-    inference_image_name = "paddle"
-
-    # processing step for feature engineering
-#     try:
-#         processing_image_uri = sagemaker_session.sagemaker_client.describe_image_version(ImageName=processing_image_name)['ContainerImage']
-#     except (sagemaker_session.sagemaker_client.exceptions.ResourceNotFound):
-#         processing_image_uri = sagemaker.image_uris.retrieve(
-#             framework="xgboost",
-#             region=region,
-#             version="1.0-1",
-#             py_version="py3",
-#             instance_type=processing_instance_type,
-#         )
-#     script_processor = ScriptProcessor(
-#         image_uri=processing_image_uri,
-#         instance_type=processing_instance_type,
-#         instance_count=processing_instance_count,
-#         base_job_name=f"{base_job_prefix}/sklearn-abalone-preprocess",
-#         command=["python3"],
-#         sagemaker_session=sagemaker_session,
-#         role=role,
-#     )
-#     step_process = ProcessingStep(
-#         name="PreprocessAbaloneData",
-#         processor=script_processor,
-#         outputs=[
-#             ProcessingOutput(output_name="train", source="/opt/ml/processing/train"),
-#             ProcessingOutput(output_name="validation", source="/opt/ml/processing/validation"),
-#             ProcessingOutput(output_name="test", source="/opt/ml/processing/test"),
-#         ],
-#         code=os.path.join(BASE_DIR, "preprocess.py"),
-#         job_arguments=["--input-data", input_data],
-#     )
+    script_processor = ScriptProcessor(
+        image_uri=data_generate_image,
+        instance_type=processing_instance_type,
+        instance_count=processing_instance_count,
+        base_job_name=f"{base_job_prefix}/paddle-ocr-data-generation",
+        command=["python3"],
+        sagemaker_session=sagemaker_session,
+        role=role,
+    )
+    step_process = ProcessingStep(
+        name="GenerateOCRTrainingData",
+        processor=script_processor,
+        outputs=[
+            ProcessingOutput(output_name="data", source="/opt/ml/processing/input/data"),
+        ],
+        code=os.path.join(BASE_DIR, "preprocess.py"),
+        job_arguments=["--input-data", input_data],
+    )
 
     # training step for generating model artifacts
     model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/PaddleOCRTrain"
 
-#     try:
-#         print(training_image_name)
-#         training_image_uri = sagemaker_session.sagemaker_client.describe_image_version(ImageName=training_image_name)['ContainerImage']
-#     except (sagemaker_session.sagemaker_client.exceptions.ResourceNotFound):
-#         training_image_uri = sagemaker.image_uris.retrieve(
-#             framework="xgboost",
-#             region=region,
-#             version="1.0-1",
-#             py_version="py3",
-#             instance_type=training_instance_type,
-#         )
 
-    training_image_uri = "230755935769.dkr.ecr.us-east-1.amazonaws.com/paddle:latest"
+    image = "{}.dkr.ecr.{}.amazonaws.com/{}".format(account, region, train_image_name)
+
+    training_image_uri = image 
     hyperparameters = {"epoch_num": 10,
                   "print_batch_step":5,
                   "save_epoch_step":30,
@@ -252,6 +167,12 @@ def get_pipeline(
         sagemaker_session=sagemaker_session,
         base_job_name=f"{base_job_prefix}/paddleocr-train",
         hyperparameters=hyperparameters,
+#         acc: 0.2007992007992008, norm_edit_dis: 0.7116550116550118, fps: 97.10778964378831, best_epoch: 9
+        metric_definitions=[
+               {'Name': 'validation:acc', 'Regex': '.*best metric,.*acc:(.*?),'},
+               {'Name': 'validation:norm_edit_dis', 'Regex': '.*best metric,.*norm_edit_dis:(.*?),'}
+        ]
+
     )
 
 
@@ -260,71 +181,17 @@ def get_pipeline(
         estimator=paddle_train,
         inputs={
             "training": TrainingInput(
-                s3_data=input_data,
-                content_type="text/csv",
-            )
-        },
+                s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
+                    "data"
+                ].S3Output.S3Uri,
+                content_type="image/jpeg")
+        }
     )
 
-    # processing step for evaluation
-#     script_eval = ScriptProcessor(
-#         image_uri=training_image_uri,
-#         command=["python3"],
-#         instance_type=processing_instance_type,
-#         instance_count=1,
-#         base_job_name=f"{base_job_prefix}/script-abalone-eval",
-#         sagemaker_session=sagemaker_session,
-#         role=role,
-#     )
-#     evaluation_report = PropertyFile(
-#         name="AbaloneEvaluationReport",
-#         output_name="evaluation",
-#         path="evaluation.json",
-#     )
-#     step_eval = ProcessingStep(
-#         name="EvaluateAbaloneModel",
-#         processor=script_eval,
-#         inputs=[
-#             ProcessingInput(
-#                 source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
-#                 destination="/opt/ml/processing/model",
-#             ),
-#             ProcessingInput(
-#                 source=step_process.properties.ProcessingOutputConfig.Outputs[
-#                     "test"
-#                 ].S3Output.S3Uri,
-#                 destination="/opt/ml/processing/test",
-#             ),
-#         ],
-#         outputs=[
-#             ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
-#         ],
-#         code=os.path.join(BASE_DIR, "evaluate.py"),
-#         property_files=[evaluation_report],
-#     )
 
-#     # register model step that will be conditionally executed
-#     model_metrics = ModelMetrics(
-#         model_statistics=MetricsSource(
-#             s3_uri="{}/evaluation.json".format(
-#                 step_eval.arguments["ProcessingOutputConfig"]["Outputs"][0]["S3Output"]["S3Uri"]
-#             ),
-#             content_type="application/json"
-#         )
-#     )
 
-#     try:
-#         inference_image_uri = sagemaker_session.sagemaker_client.describe_image_version(ImageName=inference_image_name)['ContainerImage']
-#     except (sagemaker_session.sagemaker_client.exceptions.ResourceNotFound):
-#         inference_image_uri = sagemaker.image_uris.retrieve(
-#             framework="xgboost",
-#             region=region,
-#             version="1.0-1",
-#             py_version="py3",
-#             instance_type=inference_instance_type,
-#         )
 
-    inference_image_uri = "230755935769.dkr.ecr.us-east-1.amazonaws.com/paddle:latest"
+    inference_image_uri = image
     step_register = RegisterModel(
         name="RegisterPaddleOCRModel",
         estimator=paddle_train,
@@ -335,37 +202,34 @@ def get_pipeline(
         inference_instances=["ml.p2.xlarge"],
         transform_instances=["ml.p2.xlarge"],
         model_package_group_name=model_package_group_name,
-        approval_status=model_approval_status,
-#         model_metrics=model_metrics,
+        approval_status=model_approval_status
+    )
+    
+    cond_lte = ConditionGreaterThanOrEqualTo(  # You can change the condition here
+        left=step_train.properties.FinalMetricDataList[0].Value,
+        right=0.8,  # You can change the threshold here
+    )
+    
+    step_cond = ConditionStep(
+        name="PaddleOCRAccuracyCond",
+        conditions=[cond_lte],
+        if_steps=[step_register],
+        else_steps=[],
     )
 
-    # condition step for evaluating model quality and branching execution
-#     cond_lte = ConditionLessThanOrEqualTo(
-#         left=JsonGet(
-#             step_name=step_eval.name,
-#             property_file=evaluation_report,
-#             json_path="regression_metrics.mse.value"
-#         ),
-#         right=6.0,
-#     )
-#     step_cond = ConditionStep(
-#         name="CheckMSEAbaloneEvaluation",
-#         conditions=[cond_lte],
-#         if_steps=[step_register],
-#         else_steps=[],
-#     )
 
     # pipeline instance
     pipeline = Pipeline(
         name=pipeline_name,
         parameters=[
-#             processing_instance_type,
-#             processing_instance_count,
+            processing_instance_type,
+            processing_instance_count,
             training_instance_type,
             model_approval_status,
             input_data,
         ],
-        steps=[step_train, step_register],
+        steps = [step_process, step_train, step_cond],
+#         steps=[step_train, step_register],
         sagemaker_session=sagemaker_session,
     )
     return pipeline

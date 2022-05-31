@@ -4,40 +4,20 @@
 
 # Quick Start 
 
-run train_and_deploy/notebook.ipynb
+Run train_and_deploy/notebook.ipynb on Amazon SageMaker Notebook Instances
 
-# code repo organisation (proposition) 
+Or follow step-by-step guidance on Amazon SageMaker Studio Notebooks with our blog post (to be annoucned)
 
-* experiments-sagemaker-studio (container will be built through CICD)
-* experiments-notebooks (container will be built with docker build, test with local mode)
-* image-build-train
+# Code Structure
+
+* experiments-sagemaker-studio (SageMaker training and deployment SDK)
+* image-build-train 
 * image-build-deploy
 * sagemaker-pipeline-workflow
 
 ## Features
 
-- [x] **SageMaker Training/Deploy BYOC Mode Support**
-- [x] **BYOC training support integrate with Amazon SageMaker training hyper-parameters**
-- [x] **convert models from training for inference**
-- [x] **BYOC inference support S3ModelURL**
-- [ ] **onnx speed up**
-- [ ] **integrate with Amazon SageMaker pipeline**
-
-
-
-To do 
-
-- [ ] **onnx speed up** (best effort, not related to blog)
-- [ ] **Amazon SageMaker Project Template** (best effort, not related to blog)
-- [ ] **Demo image with bbox and json on ID card** (included in the blog)
-- [ ] **Accuracy improvement** (best effort, related to blog)
-
-In progress
-
-- [ ] **SageMaker Experiments** (Yanwei)
-- [ ] **Text generation with Processing Job container**  (Yanwei + Yi-An)
-- [ ] **Evaluation json export during training**  (Yi-An)
-- [ ] **integrate with Amazon SageMaker pipeline pipeline.py**(Yi-An)
+![alt text](./dsOnboarding.png)
 
 
 ## Security
